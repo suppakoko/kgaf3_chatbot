@@ -1,0 +1,69 @@
+af3_mcp_host_env.patch — make the AF3 MCP HTTP server bind configurable.
+
+WHAT THIS PATCHES (IMPORTANT):
+  This patch is for the EXTERNAL af3_chatbot repository, NOT for afmm_chat.
+  It is provided here only as a convenience for users who run their own
+  AF3 MCP server and want it reachable from a Docker container or a remote
+  host. The afmm_chat installer does NOT apply it.
+
+WHY:
+  af3_chatbot/app/mcp/af3_mcp_http.py hardcodes host="127.0.0.1", port=8002
+  in main(). With that binding the AF3 MCP server is reachable ONLY by other
+  processes on the same host loopback — not from inside the afmm-chat
+  container (which reaches the host via host.docker.internal / the docker0
+  bridge IP) and not from a remote machine. This is blocker "B3".
+
+WHAT IT CHANGES (1 logical change):
+  - adds  `import os`
+  - host  -> os.getenv("AF3_MCP_HOST", "0.0.0.0")
+  - port  -> int(os.getenv("AF3_MCP_PORT", "8002"))
+
+HOW TO APPLY (run from the af3_chatbot repo root):
+  git apply af3_mcp_host_env.patch
+  # or, if not a git checkout:
+  patch -p1 < af3_mcp_host_env.patch
+
+THEN set the binding (e.g. in af3-mcp.service):
+  Environment=AF3_MCP_HOST=0.0.0.0      # or the docker0 bridge IP
+  Environment=AF3_MCP_PORT=8002
+and expose the port to trusted sources only (firewalld trusted zone / docker0).
+See docs/BRIDGE.md for the full procedure and the no-patch workarounds.
+
+--- a/app/mcp/af3_mcp_http.py
++++ b/app/mcp/af3_mcp_http.py
+@@ -9,6 +9,7 @@
+
+ import json
+ import logging
++import os
+ import sys
+ import uuid
+ from contextlib import asynccontextmanager
+@@ -527,18 +528,21 @@
+ # 진입점
+ # ---------------------------------------------------------------------------
+
+ def main() -> None:
+-    """127.0.0.1:8002 에서 HTTP MCP 서버 실행."""
++    """HTTP MCP 서버 실행. 바인딩은 AF3_MCP_HOST/AF3_MCP_PORT 로 오버라이드 가능."""
+     logging.basicConfig(
+         level=logging.INFO,
+         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+     )
+
++    host = os.getenv("AF3_MCP_HOST", "0.0.0.0")
++    port = int(os.getenv("AF3_MCP_PORT", "8002"))
++
+     asgi_app = create_asgi_app()
+     uvicorn.run(
+         asgi_app,
+-        host="127.0.0.1",
+-        port=8002,
++        host=host,
++        port=port,
+         log_level="info",
+     )
+
+
+ if __name__ == "__main__":
+     main()

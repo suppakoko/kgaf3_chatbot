@@ -1,0 +1,51 @@
+# =============================================================================
+# .dockerignore — keep the afmm-chat build context small and secret-free.
+# (Applies to the root build context: the afmm-chat Dockerfile.
+#  The smina-mcp service has its own ./smina-mcp/.dockerignore.)
+# =============================================================================
+
+# ── Secrets / env ────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.docker.example
+
+# ── Python venv / caches ─────────────────────────────────────────────────────
+.venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# ── Data / runtime artifacts (never bake into the image) ─────────────────────
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
+# ── Tests ────────────────────────────────────────────────────────────────────
+tests/
+
+# ── VCS ──────────────────────────────────────────────────────────────────────
+.git
+.gitignore
+.github/
+
+# ── Docs / build (not needed at runtime) ─────────────────────────────────────
+docs/
+*.md
+!README.md
+
+# ── Node (in case any front-end tooling lands here) ──────────────────────────
+node_modules/
+
+# ── Removed source (already gone — defensive) ────────────────────────────────
+smina-mcp/smina_tools.SOURCE.py
+
+# ── Compose / docker meta (not part of the app image) ────────────────────────
+docker-compose*.yml
+Dockerfile
+.dockerignore

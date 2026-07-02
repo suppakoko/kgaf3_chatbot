@@ -1,0 +1,85 @@
+# syntax=docker/dockerfile:1
+#
+# smina-only MCP server — streamable-http on 0.0.0.0:8001 path /mcp/.
+# No OpenMM, no conda, no RDKit. smina runs via subprocess on CPU.
+#
+FROM python:3.12-slim
+
+# ── System deps ───────────────────────────────────────────────────────────────
+# - tini       : PID 1 reaper (clean signal handling for the asyncio server +
+#                smina subprocesses).
+# - curl       : used to fetch the pinned smina binary at build time AND by the
+#                container HEALTHCHECK.
+# - ca-certificates : TLS for the SourceForge download.
+#
+# NOTE on smina runtime libs: the pinned smina.static is a *fully statically
+# linked* ELF (`ldd` -> "not a dynamic executable"), so it needs NO libgomp /
+# libstdc++ / libz at runtime. If you ever swap in a dynamically linked smina,
+# add: libgomp1 libstdc++6 zlib1g  to the apt-get line below.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        tini \
+        curl \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── smina static binary (pinned) ─────────────────────────────────────────────
+# Provenance : SourceForge "smina" project, file "smina.static"
+#              Version string: "Smina Oct 15 2019. Based on AutoDock Vina 1.1.2."
+#              Released 2019-10-15, 9,853,920 bytes, x86-64 statically-linked ELF.
+# Primary URL : https://sourceforge.net/projects/smina/files/smina.static/download
+# Mirror      : https://downloads.sourceforge.net/project/smina/smina.static
+# SHA256 (pinned, verified at build) :
+#   ffe5e1e78c947f76b0df8805e2c54383d0bbaf2e827a633b643a708cf682a958
+#
+# Fallback note: if SourceForge is unreachable, build smina from source
+# (https://github.com/mwojcikowski/smina) or use the gnina project static
+# binary (https://github.com/gnina/gnina/releases) — but gnina is GPU-oriented
+# and ~1.4 GB; this CPU-only service intentionally uses the small static smina.
+ARG SMINA_URL="https://downloads.sourceforge.net/project/smina/smina.static"
+ARG SMINA_SHA256="ffe5e1e78c947f76b0df8805e2c54383d0bbaf2e827a633b643a708cf682a958"
+RUN curl -fsSL "${SMINA_URL}" -o /usr/local/bin/smina \
+    && echo "${SMINA_SHA256}  /usr/local/bin/smina" | sha256sum -c - \
+    && chmod +x /usr/local/bin/smina \
+    && /usr/local/bin/smina --version
+
+# ── uv (package manager) ─────────────────────────────────────────────────────
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+ENV UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    UV_PROJECT_ENVIRONMENT=/app/.venv \
+    PATH="/app/.venv/bin:${PATH}" \
+    SMINA_BIN=/usr/local/bin/smina \
+    SMINA_MCP_HOST=0.0.0.0 \
+    SMINA_MCP_PORT=8001 \
+    SMINA_MCP_PATH=/mcp/
+
+WORKDIR /app
+
+# Dependency layer first (cache-friendly).
+COPY pyproject.toml ./
+RUN uv sync --no-install-project --no-dev
+
+# App source.
+COPY smina_mcp/ ./smina_mcp/
+COPY server.py README.md ./
+RUN uv sync --no-dev
+
+# ── Non-root + shared work volume ────────────────────────────────────────────
+# uid=1000 must be able to read receptor.pdb/ligand.sdf and write
+# *_minimized.sdf under the shared "afmm_work" volume mounted at /data/work.
+RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin appuser \
+    && mkdir -p /data/work \
+    && chown -R appuser:appuser /app /data/work
+VOLUME ["/data/work"]
+USER appuser
+
+EXPOSE 8001
+
+# Liveness probe hits the custom /health route (no MCP session needed).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8001/health || exit 1
+
+ENTRYPOINT ["tini", "--"]
+CMD ["python", "server.py"]

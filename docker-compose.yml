@@ -1,0 +1,173 @@
+# =============================================================================
+# afmm_chat (Lite) — default compose stack.
+#
+#   kgaf3-chat  : CPU FastAPI UI/API, host-loopback :5013.
+#   smina-mcp  : bundled smina-only docking MCP, internal :8001 (no host port).
+#
+# AF3 MCP and OpenRouter are EXTERNAL (not part of this stack):
+#   - AF3 MCP    -> reached via host.docker.internal:8002 (set AF3_MCP_URL in .env.docker)
+#   - OpenRouter -> reached over the public internet (OPENROUTER_API_KEY in .env.docker)
+#
+# Quick start:
+#   cp .env.docker.example .env.docker     # then fill in OPENROUTER_API_KEY, AF3_OUTPUT_ROOT, ...
+#   docker compose build                   # add --build-arg UID=$(id -u) --build-arg GID=$(id -g) to match host uid
+#   docker compose up -d
+#   curl -fsS http://127.0.0.1:5013/health/ready
+#
+# compose v2 syntax — the top-level `version:` key is intentionally omitted.
+# =============================================================================
+name: kgaf3-chat
+
+services:
+  # ---------------------------------------------------------------------------
+  # kgaf3-chat — FastAPI front-end / orchestrator
+  # ---------------------------------------------------------------------------
+  kgaf3-chat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Align the in-container uid/gid with the host user that owns the
+        # bind-mounted AF3 output dir. Override on the CLI to match your host:
+        #   docker compose build --build-arg UID=$(id -u) --build-arg GID=$(id -g)
+        UID: "1000"
+        GID: "1000"
+    image: kgaf3-chat:${TAG:-latest}
+    restart: unless-stopped
+
+    # Loopback-only: external exposure is expected via an nginx reverse proxy.
+    ports:
+      - "127.0.0.1:${APP_PORT:-5013}:5013"
+
+    # Reach the EXTERNAL AF3 MCP running on the Docker host (host.docker.internal).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    env_file:
+      - .env.docker
+
+    volumes:
+      # Private app state: SQLite DB (/data/afmm.db) + uploads (/data/uploads).
+      - afmm_data:/data
+      # Shared work volume — kgaf3-chat writes receptor.pdb/ligand.sdf here and
+      # smina-mcp reads the SAME absolute paths. MUST be mounted in both services.
+      - afmm_work:/data/work
+      # AF3 results (read-only). The container path MUST equal the host path so
+      # the absolute AF3 paths the app records resolve identically inside the
+      # container. AF3_OUTPUT_ROOT must be an ABSOLUTE host path (e.g. /data/af3_out).
+      # SELinux hosts (RHEL/Rocky): append ",ro" -> ":z,ro" on the next line (see note below).
+      - "${AF3_OUTPUT_ROOT}:${AF3_OUTPUT_ROOT}:ro"
+
+    depends_on:
+      smina-mcp:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "3", "http://127.0.0.1:5013/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # smina-mcp — bundled CPU docking MCP (no host port; internal only)
+  # ---------------------------------------------------------------------------
+  smina-mcp:
+    build:
+      context: ./smina-mcp
+      dockerfile: Dockerfile.smina
+    image: afmm-smina-mcp:${TAG:-latest}
+    restart: unless-stopped
+
+    # Internal-only — kgaf3-chat reaches it at http://smina-mcp:8001/mcp/.
+    # No host port mapping by design.
+    expose:
+      - "8001"
+
+    volumes:
+      # SAME named volume as kgaf3-chat: identical absolute paths under /data/work.
+      - afmm_work:/data/work
+
+    # HEALTHCHECK is baked into the image (Dockerfile.smina) — no override here.
+
+  # ---------------------------------------------------------------------------
+  # GraphRAG stack — ON BY DEFAULT in kgaf3_chatbot (KG is a first-class mode).
+  # Pull & run, no build.
+  #
+  #   neo4j        : KG-embedded Neo4j (NPASS 3.0 + Open Targets 25.12,
+  #                  273,519 nodes / 1,493,463 relationships auto-loaded).
+  #   graphrag-mcp : MCP SSE server (:8893/sse) — kgaf3-chat connects here at
+  #                  GRAPHRAG_MCP_URL=http://graphrag-mcp:8893/sse.
+  #
+  # A plain `docker compose up -d` starts these two along with the app.
+  # To OPT OUT (screening-only, no KG), either set GRAPHRAG_ENABLED=false in
+  # configure.md and skip them with `docker compose up -d kgaf3-chat smina-mcp`,
+  # or scale them to zero: `docker compose up -d --scale neo4j=0 --scale graphrag-mcp=0`.
+  # kgaf3-chat has NO depends_on here — the app still starts and degrades
+  # gracefully (logs mcp_unreachable) if GraphRAG is scaled down or unhealthy.
+  # ---------------------------------------------------------------------------
+  neo4j:
+    image: yoonjuho94/graphrag-neo4j:1.0
+    container_name: graphrag-neo4j
+    restart: unless-stopped
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-kist2026npi}
+    # Host ports are optional — kgaf3-chat/graphrag-mcp reach Neo4j internally at
+    # bolt://neo4j:7687. Uncomment to inspect from the host (change left side if
+    # 7474/7687 are taken, e.g. "17474:7474","17687:7687").
+    # ports: ["7474:7474","7687:7687"]
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  graphrag-mcp:
+    image: yoonjuho94/graphrag-mcp-server:1.0
+    container_name: graphrag-mcp
+    restart: unless-stopped
+    # Reuse the app env file for OPENROUTER_API_KEY / OPENROUTER_BASE_URL
+    # (graphrag_query needs an LLM key). NEO4J_* below point at the bundled DB.
+    env_file:
+      - .env.docker
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-kist2026npi}
+      # The GraphRAG LLM model (used inside the MCP server) — mirror the app's.
+      - OPENROUTER_MODEL=${GRAPHRAG_OPENROUTER_MODEL:-anthropic/claude-opus-4-7}
+    # Expose the MCP SSE endpoint on the host loopback too, so other local MCP
+    # clients (e.g. Claude Desktop) can share the same server. kgaf3-chat itself
+    # reaches it internally at http://graphrag-mcp:8893/sse.
+    ports:
+      - "127.0.0.1:8893:8893"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+
+volumes:
+  afmm_data:
+  afmm_work:
+  neo4j-data:
+
+# Default user-defined bridge network (implicit). kgaf3-chat <-> smina-mcp
+# resolve each other by service name over this network.
+networks:
+  default:
+    driver: bridge
+
+# -----------------------------------------------------------------------------
+# SELinux note (RHEL / Rocky / Fedora hosts, enforcing mode):
+#   Plain bind mounts above will be DENIED by SELinux. Add a relabel suffix:
+#     - private RW : append ":Z"     (e.g. a host bind for /data, if you switch
+#                                      from the named volume to a bind mount)
+#     - shared  RO : append ":z,ro"  (the AF3_OUTPUT_ROOT line, since the host
+#                                      AF3 service also writes there — ":Z" would
+#                                      break that writer)
+#   We default to plain mounts (and named volumes) because ":Z"/":z" break on
+#   non-SELinux hosts (Docker Desktop / Ubuntu). Edit the AF3_OUTPUT_ROOT line to
+#   ":${AF3_OUTPUT_ROOT}:z,ro" only when deploying on an SELinux host.
+# -----------------------------------------------------------------------------

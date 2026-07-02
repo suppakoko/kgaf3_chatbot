@@ -1,0 +1,20 @@
+[project]
+name = "smina-mcp"
+version = "0.1.0"
+description = "Standalone smina-only MCP server (streamable-http) for afmm-chat virtual screening rescoring. No OpenMM."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "fastmcp>=2.0",
+    "pydantic>=2.0",
+    "structlog>=24.0",
+    "uvicorn>=0.30",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["smina_mcp"]

@@ -1,0 +1,37 @@
+# =============================================================================
+# docker-compose.gpu.yml  —  RESERVED / OPTIONAL / NON-FUNCTIONAL IN LITE
+#
+# This is a STUB. It is intentionally NOT usable with the Lite distribution.
+#
+# The Lite profile does NOT bundle OpenMM and runs no GPU workload — kgaf3-chat
+# is CPU-only and smina runs on CPU. A GPU is only relevant for a FUTURE "Full"
+# profile that bundles an OpenMM + GPU rescoring image, which is NOT built here.
+#
+# Using it requires ALL of the following (none provided by this distribution):
+#   1. A Full smina+OpenMM image (a GPU-capable service, e.g. `openmm-mcp`).
+#   2. nvidia-container-toolkit installed on the host.
+#   3. On SELinux hosts: `setsebool -P container_use_devices 1`.
+#
+# When that image exists, this override would be layered on top of the base file:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# The block below shows the compose-standard device reservation that WOULD be
+# added to the (future) GPU service. It is commented out so this file is inert.
+# Do NOT point it at kgaf3-chat or smina-mcp — neither uses a GPU.
+#
+# NOTE: `deploy.resources.reservations.devices` (compose-standard) and the legacy
+# `runtime: nvidia` are mutually exclusive — declare only one.
+# =============================================================================
+name: kgaf3-chat
+
+# services:
+#   # Placeholder for a FUTURE Full-profile GPU service. Not built in Lite.
+#   openmm-mcp:
+#     image: afmm-openmm-mcp:${TAG:-latest}   # <- image does not exist in Lite
+#     deploy:
+#       resources:
+#         reservations:
+#           devices:
+#             - driver: nvidia
+#               device_ids: ["0"]            # or: count: 1
+#               capabilities: ["gpu"]

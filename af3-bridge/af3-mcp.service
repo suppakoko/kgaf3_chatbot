@@ -1,0 +1,69 @@
+# =============================================================================
+# AF3 MCP HTTP Transport — afmm_chat 가상 스크리닝 챗봇 연동 (port 8002)
+# =============================================================================
+# 설치:
+#   sudo cp af3-mcp.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now af3-mcp
+#
+# 명령어:
+#   sudo systemctl start af3-mcp       # 시작
+#   sudo systemctl stop af3-mcp        # 중지
+#   sudo systemctl restart af3-mcp     # 재시작
+#   sudo systemctl status af3-mcp      # 상태 확인
+#   journalctl -u af3-mcp -f           # 로그 실시간 확인
+#
+# 엔드포인트: http://127.0.0.1:8002/mcp  (localhost only)
+# =============================================================================
+
+[Unit]
+Description=AF3 MCP HTTP Transport - Virtual Screening MCP Server (port 8002)
+After=network.target docker.service af3-chatbot.service
+Wants=network.target docker.service
+
+[Service]
+Type=simple
+User=yjko
+Group=yjko
+WorkingDirectory=/home/yjko/Projects/NPAI/af3_chatbot
+
+# 환경변수 — af3-chatbot.service 와 동일하게 유지
+Environment=AF3_INPUT_DIR=/home/yjko/home_ssd/AF3_work/af_input/chatbot_input
+Environment=AF3_OUTPUT_DIR=/home/yjko/home_ssd/AF3_work/af_output/chatbot_output
+Environment=AF3_MODELS_DIR=/home/yjko/home_ssd/AF3/models
+Environment=AF3_DB_DIR=/home/yjko/home_ssd/AF3/DB
+Environment=AF3_HOST_INPUT=/home/yjko/home_ssd/AF3_work/af_input
+Environment=AF3_HOST_OUTPUT=/home/yjko/home_ssd/AF3_work/af_output
+Environment=AF3_DOCKER_IMAGE=alphafold3:latest
+Environment=AF3_GPU_DEVICE=0
+Environment=OLLAMA_BASE_URL=http://localhost:11434
+Environment=OLLAMA_MODEL=qwen3.5:35b
+Environment=JOBS_DB_PATH=data/af3_jobs.db
+
+# uv 환경에서 HTTP MCP 서버 모듈 실행
+ExecStart=/usr/bin/bash -c 'source /home/yjko/Projects/NPAI/af3_chatbot/.venv/bin/activate && exec /home/yjko/.local/bin/uv run python -m app.mcp.af3_mcp_http'
+
+# 프로세스 관리
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=3
+StartLimitIntervalSec=60
+
+# 종료 대기
+TimeoutStopSec=15
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Docker 접근 (AF3Service 가 Docker 컨테이너 실행)
+SupplementaryGroups=docker
+
+# 보안
+NoNewPrivileges=true
+
+# 로그
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=af3-mcp
+
+[Install]
+WantedBy=multi-user.target

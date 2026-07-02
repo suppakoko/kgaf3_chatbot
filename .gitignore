@@ -1,0 +1,49 @@
+# ── Secrets / environment ────────────────────────────────
+.env
+.env.docker
+.env.*
+# keep the committed example templates
+!.env.example
+!.env.docker.example
+
+# ── Runtime data / databases ─────────────────────────────
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# ── AF3 / model assets (NEVER publish — licensed) ────────
+# Root-anchored so they can't shadow application source like app/models/.
+/weights/
+*.bin
+*.npz
+/models/
+/af3_output/
+/af_output/
+
+# ── Prediction / docking outputs ─────────────────────────
+*.cif
+*.pdb
+*.pdbqt
+*.sdf.out
+
+# ── Python ───────────────────────────────────────────────
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# ── Editor / OS cruft ────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~

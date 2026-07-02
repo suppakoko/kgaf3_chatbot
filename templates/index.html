@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}AlphaFold Virtual Screener{% endblock %}
+
+{% block content %}
+<div class="shell">
+    <!-- ── 좌측 사이드바: 대화창 리스트 ── -->
+    <aside class="sidebar" id="sidebar" role="complementary" aria-label="대화 목록">
+        <div class="sidebar__header">
+            <button
+                id="btn-new-chat"
+                class="btn btn--new-chat"
+                type="button"
+                aria-label="새 대화 시작"
+            >+ 새 대화</button>
+        </div>
+        <div class="sidebar__section-title">최근 대화</div>
+        <div id="session-list" class="sidebar__list" role="list" aria-live="polite">
+            <div class="sidebar__empty">로딩 중...</div>
+        </div>
+    </aside>
+
+    <!-- ── 메인 앱 컬럼 ── -->
+    <div class="app">
+        <!-- Header -->
+        <header class="header" role="banner">
+            <div class="header__left">
+                <button
+                    id="btn-toggle-sidebar"
+                    class="btn btn--icon btn--toggle"
+                    type="button"
+                    aria-label="사이드바 토글"
+                    title="사이드바 토글"
+                >&#9776;</button>
+                <span class="header__logo">AlphaFold Virtual Screener</span>
+
+                <!-- ── 모드 토글: AFMM 스크리닝 / GraphRAG 지식그래프 ── -->
+                <div
+                    class="mode-toggle"
+                    role="tablist"
+                    aria-label="채팅 모드 선택"
+                    id="mode-toggle"
+                >
+                    <button
+                        type="button"
+                        class="mode-toggle__btn"
+                        role="tab"
+                        aria-selected="false"
+                        data-mode="graphrag"
+                        title="KIST NPI 지식그래프 자연어 질의 (NPASS + Open Targets)"
+                    >🧬 GraphRAG</button>
+                    <button
+                        type="button"
+                        class="mode-toggle__btn mode-toggle__btn--active"
+                        role="tab"
+                        aria-selected="true"
+                        data-mode="afmm"
+                        title="AF3 + Smina 가상 스크리닝 (단백질-리간드 도킹)"
+                    >🧪 AlphaFold</button>
+                </div>
+
+                <span id="active-session-label" class="header__session" aria-live="polite"></span>
+            </div>
+            <div class="header__right">
+                <label for="model-selector" class="sr-only">LLM 모델 선택</label>
+                <select
+                    id="model-selector"
+                    class="model-selector"
+                    aria-label="LLM 모델 선택"
+                    data-action="model-select"
+                >
+                    {% for model in allowed_models %}
+                    <option
+                        value="{{ model }}"
+                        {% if model == default_model %}selected{% endif %}
+                    >{{ model }}</option>
+                    {% endfor %}
+                </select>
+                <div class="status-indicator" id="status-indicator" aria-live="polite" aria-atomic="true">
+                    <span id="status-dot" class="status-dot status-dot--connecting" aria-hidden="true"></span>
+                    <span id="status-text">연결 중...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Chat Area -->
+        <main class="main" id="main-content" role="main">
+            <div id="messages" class="messages" role="log" aria-live="polite" aria-label="채팅 메시지">
+                <!-- 초기 환영 메시지 — 모드에 따라 표시 분기 -->
+                <div class="welcome" id="welcome-screen">
+                    <!-- AFMM 모드 환영 -->
+                    <div class="welcome__panel welcome__panel--afmm" data-welcome-mode="afmm">
+                        <h1 class="welcome__title">AF3 + Smina 가상 스크리닝 챗봇</h1>
+                        <p class="welcome__subtitle">단백질 FASTA와 SMILES 화합물을 같이 붙여넣고 "도킹해서 순위 매겨줘" 라고 입력하면 자동으로 스크리닝이 시작됩니다.</p>
+                        <details class="welcome__example">
+                            <summary>📋 입력 예시 보기</summary>
+                            <pre class="welcome__example-pre">&gt;ROCK1_HUMAN_1-415
+MSTGDSFETRFEKMDNLLRDPKSEVNSDCLLDGLDALVYDLDFPALRKNKNIDNFLSRYK
+DTINKIRDLRMKAEDYEVVKVIGRGAFGEVQLVRHKSTRKVYAMKLLSKFEMIKRSDSAF
+... (전체 415aa 시퀀스) ...
+
+CN(C)CCOC1=C(C=CC(=C1)C2=CNN=C2)NC(=O)[C@H]3CC4=C(C=CC(=C4)OC)OC3 Chroman_1
+C[C@H]1CNCCCN1S(=O)(=O)C2=CC=CC3=C2C(=CN=C3)C H1152
+C[C@H](C1CCC(CC1)C(=O)NC2=CC=NC=C2)N Y-27632
+
+위 단백질에 화합물 3개를 docking해서 순위를 매겨주세요</pre>
+                        </details>
+                    </div>
+
+                    <!-- GraphRAG 모드 환영 (기본 숨김) -->
+                    <div
+                        class="welcome__panel welcome__panel--graphrag"
+                        data-welcome-mode="graphrag"
+                        hidden
+                    >
+                        <h1 class="welcome__title">🧬 GraphRAG — KIST NPI 지식그래프</h1>
+                        <p class="welcome__subtitle">NPASS 3.0 + Open Targets 25.12 (273K 노드 / 1.49M 관계) 에 자연어로 질의합니다. Text2Cypher 로 답변과 실행된 Cypher 가 함께 표시됩니다.</p>
+                        <details class="welcome__example" open>
+                            <summary>💡 질문 예시</summary>
+                            <pre class="welcome__example-pre">• Tell me the targets for glaucoma treatment
+• Return the top 20 natural products active against ROCK1 with IC50 &lt; 100 nM
+• Compare ROCK1 and ROCK2 head-to-head: list UniProt/Ensembl IDs, associated glaucoma subtypes, NP counts, top compounds, and approved drugs.
+• 알츠하이머 관련 단백질 타겟에 활성이 있는 천연물 상위 10개를 보여줘</pre>
+                        </details>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 진행 상태 패널 (활성 잡 표시) -->
+            <section
+                id="status-panel"
+                class="status-panel hidden"
+                aria-label="작업 진행 상황"
+                aria-live="polite"
+            >
+                <div class="status-panel__header">
+                    <h3 class="status-panel__title">작업 진행 상황</h3>
+                    <button
+                        id="btn-close-status-panel"
+                        class="btn btn--icon"
+                        type="button"
+                        aria-label="작업 패널 닫기"
+                    >&times;</button>
+                </div>
+                <div id="status-panel-body" class="status-panel__body"></div>
+            </section>
+
+            <!-- 입력 영역 -->
+            <div class="input-area" role="region" aria-label="메시지 입력">
+                <div class="input-area__container" id="input-area-container" data-mode="afmm">
+                    <button
+                        id="btn-upload"
+                        class="btn btn--upload"
+                        type="button"
+                        aria-label="라이브러리 파일 업로드 (.sdf, .smi, .csv, .txt)"
+                        title="라이브러리 업로드"
+                        data-action="open-upload"
+                    >라이브러리 업로드</button>
+                    <input
+                        type="file"
+                        id="file-input"
+                        accept=".sdf,.smi,.csv,.txt"
+                        aria-label="라이브러리 파일 선택"
+                        style="display:none"
+                        tabindex="-1"
+                    >
+
+                    <textarea
+                        id="chat-input"
+                        class="input-area__textarea"
+                        placeholder="메시지를 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)"
+                        rows="1"
+                        aria-label="채팅 메시지 입력"
+                        aria-multiline="true"
+                        aria-describedby="input-hint"
+                        autocomplete="off"
+                        spellcheck="false"
+                    ></textarea>
+                    <span id="input-hint" class="sr-only">Enter 키로 전송, Shift+Enter로 줄바꿈</span>
+
+                    <button
+                        id="btn-send"
+                        class="btn btn--send"
+                        type="button"
+                        aria-label="메시지 전송"
+                        data-action="send"
+                    >전송</button>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- Phase 3: 차트 패널 -->
+<section
+    id="charts-panel"
+    class="charts-panel hidden"
+    aria-label="스크리닝 결과 차트"
+    aria-live="polite"
+>
+    <div class="charts-panel__header">
+        <h3 class="charts-panel__title">결과 분포 차트</h3>
+        <button
+            id="btn-close-charts"
+            class="btn btn--icon viewer-close"
+            type="button"
+            aria-label="차트 패널 닫기"
+        >&times;</button>
+    </div>
+    <div class="charts-panel__grid">
+        <div id="chart-smina-dist"  class="chart-cell" aria-label="Smina 분포 차트"></div>
+        <div id="chart-iptm-smina"  class="chart-cell" aria-label="ipTM vs Smina 차트"></div>
+    </div>
+</section>
+
+<!-- Phase 3: Mol* 3D 뷰어 오버레이 -->
+<div
+    id="vs-viewer-overlay"
+    class="vs-viewer-overlay hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-label="3D 구조 뷰어"
+>
+    <div class="vs-viewer-container">
+        <div class="vs-viewer-toolbar">
+            <span id="vs-viewer-title" class="vs-viewer-title">3D 복합체 구조</span>
+            <div class="vs-viewer-actions">
+                <button
+                    id="btn-viewer-screenshot"
+                    class="btn btn--refresh"
+                    type="button"
+                    aria-label="구조 스크린샷 저장"
+                >스크린샷</button>
+                <button
+                    id="btn-close-viewer"
+                    class="btn btn--icon viewer-close"
+                    type="button"
+                    aria-label="뷰어 닫기"
+                >&times;</button>
+            </div>
+        </div>
+        <div id="vs-viewer" class="vs-viewer-canvas"></div>
+    </div>
+</div>
+
+<!-- ── 하단 시스템 정보 바 (확장) ── -->
+<footer class="system-bar" id="system-bar" role="status" aria-live="polite">
+    <span id="status-bar" class="system-bar__chip system-bar__chip--status">연결 중...</span>
+    <span id="sb-mcp-af3" class="system-bar__chip" title="AF3 MCP 연결 상태">AF3: -</span>
+    <span id="sb-mcp-openmm" class="system-bar__chip" title="Smina(MCP) 연결 상태">Smina: -</span>
+    <span id="sb-graphrag" class="system-bar__chip" title="GraphRAG Neo4j 연결 상태">GraphRAG: -</span>
+    <span id="sb-llm" class="system-bar__chip" title="LLM 기본 모델">LLM: -</span>
+    <span id="sb-jobs" class="system-bar__chip" title="진행중 작업 수">jobs: -</span>
+    <span id="sb-gpus" class="system-bar__chip system-bar__chip--gpus" title="GPU 사용률 / 메모리"></span>
+    <span class="system-bar__spacer"></span>
+    <span id="sb-clock" class="system-bar__chip system-bar__chip--clock" aria-label="현재 시각"></span>
+</footer>
+
+<!-- 파일 업로드 미리보기 영역 -->
+<div id="upload-preview" class="upload-preview" hidden aria-live="polite">
+    <div class="upload-preview__header">
+        <span id="upload-preview-name" class="upload-preview__name"></span>
+        <button
+            class="btn btn--icon"
+            id="btn-close-preview"
+            type="button"
+            aria-label="업로드 미리보기 닫기"
+        >&times;</button>
+    </div>
+    <div id="upload-preview-info" class="upload-preview__info"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/sidebar.js?v={{ asset_v }}"></script>
+<script src="/static/js/jobs_panel.js?v={{ asset_v }}"></script>
+<script src="/static/js/system_bar.js?v={{ asset_v }}"></script>
+{% endblock %}

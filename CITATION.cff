@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+title: "kgaf3_chatbot: a conversational knowledge-graph + AlphaFold3 cofolding chatbot"
+abstract: >-
+  kgaf3_chatbot is a local-first web chat application that combines two modes:
+  (1) a GraphRAG knowledge-graph mode that answers natural-language questions
+  over an integrated natural-product knowledge graph (NPASS 3.0 + Open Targets
+  release 25.12) via a bundled Neo4j + MCP-over-SSE server, and (2) a
+  protein–ligand virtual-screening mode that orchestrates an external
+  AlphaFold3 MCP server for cofolding, runs a bundled smina --minimize
+  rescoring step, and returns a ranked candidate table with an interactive 3D
+  view. AlphaFold3 model weights and sequence databases are NOT distributed and
+  remain in the user's own environment under their own license.
+type: software
+authors:
+  - name: "kgaf3_chatbot contributors"
+    # TODO: replace with real author(s) and add ORCID before publishing, e.g.:
+    # - family-names: "Lastname"
+    #   given-names: "Firstname"
+    #   orcid: "https://orcid.org/0000-0000-0000-0000"
+version: "0.1.0"
+date-released: "2026-07-02"
+license: MIT
+repository-code: "https://github.com/suppakoko/kgaf3_chatbot"
+url: "https://github.com/suppakoko/kgaf3_chatbot"
+keywords:
+  - knowledge-graph
+  - graphrag
+  - neo4j
+  - natural-products
+  - virtual-screening
+  - protein-ligand
+  - alphafold3
+  - cofolding
+  - smina
+  - docking
+  - mcp
+  - chatbot
+  - drug-discovery
+# After connecting the repo to Zenodo and minting a DOI, add it here:
+# identifiers:
+#   - type: doi
+#     value: "10.5281/zenodo.XXXXXXX"
+#     description: "Concept DOI (all versions)"
