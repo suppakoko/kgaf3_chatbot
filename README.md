@@ -1,6 +1,6 @@
 # kgaf3_chatbot
 
-English | **[한국어](README.ko.md)**
+**English** | [한국어](README.ko.md)
 
 **kgaf3_chatbot** is a local-first web chatbot with two modes: 🧬 **GraphRAG** —
 natural-language Q&A over a natural-product knowledge graph (NPASS 3.0 +
@@ -65,7 +65,7 @@ and `neo4j` (7474/7687) are internal only.
   **GPU** machine that you run yourself — see [docs/AF3_SETUP.md](docs/AF3_SETUP.md).
   kgaf3-chat itself needs no GPU.
 - For **GraphRAG mode**: the two GraphRAG images are **pulled** automatically from
-  Docker Hub (`yoonjuho94/graphrag-neo4j:1.0`, `yoonjuho94/graphrag-mcp-server:1.0`);
+  Docker Hub (`yoonjuho94/graphrag-neo4j:1.0`, `yoonjuho94/graphrag-mcp-server:1.1`);
   no build required.
 
 ## Quick start
@@ -108,10 +108,10 @@ The two application images are published to GitHub Container Registry on release
 and the GraphRAG images live on Docker Hub, so you can pull instead of building:
 
 ```bash
-docker pull ghcr.io/suppakoko/kgaf3-chat            # web UI / API
-docker pull ghcr.io/suppakoko/afmm-smina-mcp        # bundled smina docking MCP
-docker pull yoonjuho94/graphrag-neo4j:1.0           # Neo4j with the KG baked in
-docker pull yoonjuho94/graphrag-mcp-server:1.0      # GraphRAG MCP SSE server
+docker pull ghcr.io/suppakoko/kgaf3-chat:latest       # web UI / API
+docker pull ghcr.io/suppakoko/afmm-smina-mcp:latest   # bundled smina docking MCP
+docker pull yoonjuho94/graphrag-neo4j:1.0             # Neo4j with the KG baked in
+docker pull yoonjuho94/graphrag-mcp-server:1.1        # GraphRAG MCP SSE server
 ```
 
 To make the Compose stack use the app images instead of building them, add a
@@ -128,8 +128,9 @@ services:
     build: null
 ```
 
-The GraphRAG images (`yoonjuho94/graphrag-*:1.0`) are already pulled, not built,
-so they need no override.
+The GraphRAG images (`yoonjuho94/graphrag-neo4j:1.0`,
+`yoonjuho94/graphrag-mcp-server:1.1`) are already pulled, not built, so they need
+no override.
 
 ## Documentation
 

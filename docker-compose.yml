@@ -126,7 +126,7 @@ services:
       start_period: 60s
 
   graphrag-mcp:
-    image: yoonjuho94/graphrag-mcp-server:1.0
+    image: yoonjuho94/graphrag-mcp-server:1.1
     container_name: graphrag-mcp
     restart: unless-stopped
     # Reuse the app env file for OPENROUTER_API_KEY / OPENROUTER_BASE_URL

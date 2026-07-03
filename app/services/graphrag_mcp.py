@@ -2,7 +2,7 @@
 
 afmm_chat 의 GraphRAG 모드는 더 이상 graphrag.py 를 in-process 로 임포트하지 않는다.
 대신 self-contained Docker 스택(``yoonjuho94/graphrag-neo4j:1.0`` +
-``yoonjuho94/graphrag-mcp-server:1.0``)이 노출하는 **MCP SSE 서버**(기본
+``yoonjuho94/graphrag-mcp-server:1.1``)이 노출하는 **MCP SSE 서버**(기본
 ``http://graphrag-mcp:8893/sse``)에 붙어 아래 3개 도구를 호출한다.
 
   - ``graphrag_query(question, provider)``

@@ -1,152 +1,169 @@
-# AF3 셋업 — AlphaFold3와 AF3 MCP 브리지 연결하기
+**English** | [한국어](AF3_SETUP.ko.md)
 
-kgaf3_chatbot의 🧪 **가상 스크리닝** 모드는 단백질–리간드 cofolding을
-**외부 AlphaFold3(AF3)** 에 위임한다. 이 저장소는 AF3를 **직접 실행하지
-않으며**, AF3 가중치나 서열 DB를 **담고 있지도 않다.** kgaf3_chatbot은
-사용자가 직접 띄운 **AF3 MCP 서버**에 `AF3_MCP_URL`로 HTTP 요청을 보낼 뿐이다.
+# AF3 Setup — Connecting AlphaFold3 to the AF3 MCP Bridge
+
+The 🧪 **Virtual Screening** mode of kgaf3_chatbot delegates protein–ligand
+cofolding to an **external AlphaFold3 (AF3)**. This repository does **not run
+AF3 directly**, and it does **not bundle** AF3 weights or sequence databases.
+kgaf3_chatbot merely sends HTTP requests via `AF3_MCP_URL` to an **AF3 MCP
+server** that you launch yourself.
 
 ```
-kgaf3-chat 컨테이너 ──HTTP──► AF3 MCP 브리지(:8002/mcp/) ──docker run──► alphafold3 (GPU · 가중치 · 서열 DB)
-   (AF3_MCP_URL)               (외부 af3_chatbot 백엔드가 운영)
+kgaf3-chat container ──HTTP──► AF3 MCP bridge (:8002/mcp/) ──docker run──► alphafold3 (GPU · weights · sequence DBs)
+   (AF3_MCP_URL)               (operated by the external af3_chatbot backend)
 ```
 
-이 문서는 위 파이프라인을 처음부터 세우는 4단계를 설명한다:
-① AlphaFold3 준비/실행 → ② AF3 MCP 브리지 서버 실행 → ③ 호스트 바인딩 패치
-적용 → ④ `AF3_MCP_URL` 설정 → 검증. 도달성(reachability)이 막히는 구조적
-지점과 우회법은 **[`docs/BRIDGE.md`](BRIDGE.md)** 에 따로 정리돼 있으니 함께
-본다.
+This document describes the four stages of standing up the pipeline above from
+scratch: ① prepare/run AlphaFold3 → ② run the AF3 MCP bridge server → ③ apply
+the host-binding patch → ④ set `AF3_MCP_URL` → verify. The structural points
+where reachability breaks down and their workarounds are collected separately in
+**[`docs/BRIDGE.md`](BRIDGE.md)**, so read it alongside this one.
 
 > [!IMPORTANT]
-> **AF3 가중치와 서열 DB는 Google DeepMind가 라이선스한 자산이며, 이
-> 저장소에 재배포되지 않는다.** 사용자가 AF3의 **자체 라이선스 조건에 따라**
-> 직접 가중치·DB를 발급받아, **자신의 GPU 머신에서** 실행해야 한다.
-> kgaf3_chatbot은 "이미 가중치/DB를 갖춘 AF3에 연결"만 책임진다. 이 저장소
-> 코드는 MIT(`LICENSE`)이지만, AF3와 그 데이터의 라이선스 준수는 전적으로
-> 사용자 책임이다.
+> **AF3 weights and sequence databases are assets licensed by Google DeepMind
+> and are not redistributed in this repository.** Users must obtain the weights
+> and DBs themselves **under AF3's own license terms** and run them **on their
+> own GPU machines**. kgaf3_chatbot is only responsible for "connecting to an
+> AF3 that already has the weights/DBs." The code in this repository is MIT
+> (`LICENSE`), but compliance with the licenses of AF3 and its data is entirely
+> the user's responsibility.
 
 ---
 
-## 사전 요구사항
+## Prerequisites
 
-- **NVIDIA GPU** + 드라이버 + `nvidia-container-toolkit` (AF3 추론용).
-- **AlphaFold3 Docker 이미지** (`alphafold3:latest` 등) — 사용자가 직접 빌드.
-- **AF3 모델 가중치** — DeepMind로부터 라이선스 발급 후 획득.
-- **AF3 서열 데이터베이스** — MSA/템플릿 검색용 (수백 GB 규모).
-- 위 자산을 두는 호스트 경로 (예: 가중치 디렉터리, DB 디렉터리, 입력/출력
-  작업 디렉터리).
+- **NVIDIA GPU** + drivers + `nvidia-container-toolkit` (for AF3 inference).
+- **AlphaFold3 Docker image** (`alphafold3:latest`, etc.) — built by the user.
+- **AF3 model weights** — obtained after license issuance from DeepMind.
+- **AF3 sequence databases** — for MSA/template search (hundreds of GB in size).
+- Host paths where the above assets live (e.g., weights directory, DB directory,
+  input/output working directories).
 
-이 모든 것은 **AF3를 돌리는 머신**에 있어야 하며, kgaf3_chatbot이 도는
-머신과 같을 수도 다를 수도 있다(원격 구성은 `docs/BRIDGE.md` 참고).
-
----
-
-## 1단계 — AlphaFold3 준비 및 실행
-
-가중치·DB·라이선스 발급 절차는 전부 **공식 AlphaFold3 저장소**를 따른다.
-이 문서는 그 절차를 대체하지 않는다.
-
-- 공식 저장소 및 라이선스: <https://github.com/google-deepmind/alphafold3>
-- 모델 파라미터(가중치)는 별도 신청·승인 절차를 거쳐 DeepMind로부터
-  받는다. **kgaf3_chatbot 저장소에는 포함돼 있지 않다.**
-- 공식 안내에 따라 `alphafold3` Docker 이미지를 빌드하고, 가중치·서열 DB를
-  내려받아 배치한다.
-
-이 단계가 끝나면, 사용자는 GPU에서 `alphafold3` Docker 이미지를 실행해
-입력 JSON으로부터 예측 CIF를 생성할 수 있는 상태여야 한다. 다음 단계의 MCP
-브리지가 바로 이 Docker 이미지를 구동한다.
+All of this must reside on the **machine that runs AF3**, which may or may not be
+the same machine that runs kgaf3_chatbot (see `docs/BRIDGE.md` for remote
+configurations).
 
 ---
 
-## 2단계 — AF3 MCP 브리지 서버 실행
+## Stage 1 — Prepare and run AlphaFold3
 
-가상 스크리닝이 AF3에 말을 걸려면, AF3를 감싸는 **MCP 서버**가 필요하다.
-이 저장소는 그 브리지의 **참조 구현**을 `af3-bridge/`에 동봉한다.
+The procedures for obtaining weights, DBs, and license issuance all follow the
+**official AlphaFold3 repository**. This document does not replace those
+procedures.
 
-- **`af3-bridge/af3_mcp_http.py`** — HTTP MCP 트랜스포트. 이 동봉 사본은
-  `AF3_MCP_HOST`(기본 `0.0.0.0`) / `AF3_MCP_PORT`(기본 `8002`) 환경변수를 읽어
-  바인딩하므로 기본 엔드포인트는 `http://<AF3 호스트>:8002/mcp`이다(즉 호스트
-  패치가 이미 반영된 형태 — [`af3-bridge/README.md`](../af3-bridge/README.md)
-  및 [`docs/BRIDGE.md`](BRIDGE.md) 참고). kgaf3-chat이 실제로 붙는 대상이다.
-- **`af3-bridge/af3_mcp_server.py`** — stdio MCP 변형(참조용).
-- **`af3-bridge/af3-mcp.service`** — 브리지를 상시 구동하는 systemd 유닛 예시.
-- 자세한 설명·도구 목록·실행법은 **[`af3-bridge/README.md`](../af3-bridge/README.md)** 참고.
+- Official repository and license: <https://github.com/google-deepmind/alphafold3>
+- Model parameters (weights) are received from DeepMind through a separate
+  application and approval process. **They are not included in the kgaf3_chatbot
+  repository.**
+- Following the official guidance, build the `alphafold3` Docker image and
+  download and place the weights and sequence DBs.
+
+Once this stage is complete, the user should be in a state where they can run the
+`alphafold3` Docker image on a GPU to generate predicted CIFs from input JSON.
+The MCP bridge in the next stage drives exactly this Docker image.
+
+---
+
+## Stage 2 — Run the AF3 MCP bridge server
+
+For Virtual Screening to talk to AF3, an **MCP server** that wraps AF3 is
+required. This repository ships a **reference implementation** of that bridge in
+`af3-bridge/`.
+
+- **`af3-bridge/af3_mcp_http.py`** — HTTP MCP transport. This bundled copy binds
+  by reading the `AF3_MCP_HOST` (default `0.0.0.0`) / `AF3_MCP_PORT` (default
+  `8002`) environment variables, so the default endpoint is
+  `http://<AF3 host>:8002/mcp` (i.e., the host patch is already applied — see
+  [`af3-bridge/README.md`](../af3-bridge/README.md) and
+  [`docs/BRIDGE.md`](BRIDGE.md)). This is what kgaf3-chat actually connects to.
+- **`af3-bridge/af3_mcp_server.py`** — stdio MCP variant (for reference).
+- **`af3-bridge/af3-mcp.service`** — example systemd unit that keeps the bridge
+  running continuously.
+- For detailed explanation, tool list, and how to run it, see
+  **[`af3-bridge/README.md`](../af3-bridge/README.md)**.
 
 > [!WARNING]
-> **이 브리지 코드는 단독(standalone) 실행이 불가능하다.** 외부
-> **`af3_chatbot` 백엔드**에 강하게 결합돼 있어서 `app.services.af3_service.AF3Service`,
-> `JsonBuilder`, `BatchDockService`를 import하고, 실제 추론은 `alphafold3`
-> Docker 이미지를 `docker run`으로 돌려 수행한다. 따라서 브리지는 반드시
-> **af3_chatbot 앱 + alphafold3 이미지 + 사용자의 가중치/DB**가 갖춰진 환경
-> 안에서(또는 그와 함께) 실행해야 한다. `af3-bridge/`의 파일은 그 환경에서
-> 쓸 참조 브리지 서버 + systemd 유닛으로 제공되는 것이다.
+> **This bridge code cannot run standalone.** It is tightly coupled to the
+> external **`af3_chatbot` backend**, importing
+> `app.services.af3_service.AF3Service`, `JsonBuilder`, and `BatchDockService`,
+> and it performs the actual inference by running the `alphafold3` Docker image
+> via `docker run`. The bridge must therefore be run inside (or together with) an
+> environment that has the **af3_chatbot app + alphafold3 image + the user's
+> weights/DBs**. The files in `af3-bridge/` are provided as the reference bridge
+> server + systemd unit to use in that environment.
 
-브리지는 아래 **6개 핵심 도구**를 HTTP MCP(`:8002`)로 노출한다(배치용 도구는
-추가):
+The bridge exposes the following **6 core tools** over HTTP MCP (`:8002`) (batch
+tools are additional):
 
-| 도구 | 하는 일 |
-|------|---------|
-| `af3_create_job` | 단백질 서열 + 리간드 SMILES로 AF3 입력 JSON 생성 |
-| `af3_run_job` | 생성된 작업을 GPU에서 cofolding 실행 |
-| `af3_get_status` | 작업 상태 조회 |
-| `af3_get_results` | 완료된 작업의 결과(CIF 등) 조회 |
-| `af3_get_input_json` | 작업에 쓰인 입력 JSON 조회 |
-| `af3_list_jobs` | 작업 목록 나열 |
+| Tool | What it does |
+|------|--------------|
+| `af3_create_job` | Generate AF3 input JSON from a protein sequence + ligand SMILES |
+| `af3_run_job` | Run cofolding for the generated job on a GPU |
+| `af3_get_status` | Query job status |
+| `af3_get_results` | Retrieve results (CIF, etc.) of a completed job |
+| `af3_get_input_json` | Retrieve the input JSON used for a job |
+| `af3_list_jobs` | List jobs |
 
-(그 밖에 `af3_create_batch_job` / `af3_get_batch_status` /
-`af3_get_batch_results` / `af3_get_batch_ligand_result` 등 라이브러리 배치용
-도구가 함께 노출된다. 설치기는 마지막 검증에서 배치 도구까지 확인한다.)
+(In addition, library batch tools such as `af3_create_batch_job` /
+`af3_get_batch_status` / `af3_get_batch_results` /
+`af3_get_batch_ligand_result` are exposed alongside. The installer verifies the
+batch tools too in the final verification.)
 
-systemd로 상시 구동하는 예(유닛 내 경로·환경변수는 사용자 환경에 맞게 수정):
+Example of running it continuously with systemd (adjust the paths and
+environment variables in the unit to match your environment):
 
 ```bash
-# af3-bridge/af3-mcp.service 를 사용자 환경에 맞게 수정한 뒤 설치
+# Edit af3-bridge/af3-mcp.service to match your environment, then install it
 sudo cp af3-bridge/af3-mcp.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now af3-mcp
-sudo systemctl status af3-mcp        # active (running) 확인
-journalctl -u af3-mcp -f             # 로그 실시간 확인
+sudo systemctl status af3-mcp        # confirm active (running)
+journalctl -u af3-mcp -f             # watch logs in real time
 ```
 
 ---
 
-## 3단계 — 호스트 바인딩 패치 적용 (B3 도달성 문제)
+## Stage 3 — Apply the host-binding patch (B3 reachability issue)
 
-외부 **`af3_chatbot` 저장소**의 원본 `af3_mcp_http.py`는 `main()`에서 바인딩을
-`127.0.0.1:8002`로 **하드코딩**한다(이것이 `patches/af3_mcp_host_env.patch`가
-겨냥하는 대상이다). 참고로 이 저장소에 **동봉된**
-`af3-bridge/af3_mcp_http.py` 사본은 이미 이 패치가 반영돼
-`AF3_MCP_HOST`(기본 `0.0.0.0`) / `AF3_MCP_PORT`(기본 `8002`)를 읽는다
-([`af3-bridge/README.md`](../af3-bridge/README.md) · [`docs/BRIDGE.md`](BRIDGE.md)
-참고). 문제는 사용자가 실제로 운영하는 **외부 af3_chatbot** 쪽 원본이며,
-그 루프백 전용 바인딩은 **같은 호스트의 다른 프로세스만** 닿을 수 있어 다음 두
-상황에서는 도달 불가다:
+The original `af3_mcp_http.py` in the external **`af3_chatbot` repository**
+**hardcodes** the binding to `127.0.0.1:8002` in `main()` (this is what
+`patches/af3_mcp_host_env.patch` targets). For reference, the **bundled** copy
+`af3-bridge/af3_mcp_http.py` in this repository already has this patch applied
+and reads `AF3_MCP_HOST` (default `0.0.0.0`) / `AF3_MCP_PORT` (default `8002`)
+(see [`af3-bridge/README.md`](../af3-bridge/README.md) ·
+[`docs/BRIDGE.md`](BRIDGE.md)). The problem lies in the original on the
+**external af3_chatbot** side that the user actually operates, and its
+loopback-only binding can be reached **only by other processes on the same
+host**, making it unreachable in the following two situations:
 
-- kgaf3-chat **컨테이너 안**에서는 호스트를 `host.docker.internal`(또는
-  docker0 브리지 IP)로 보므로 호스트 루프백에 닿지 못한다.
-- **원격 머신**(예: 한쪽에서 kgaf3_chatbot, 다른 Linux 박스에서 AF3)에서도
-  당연히 닿지 못한다.
+- From **inside the kgaf3-chat container**, the host is seen as
+  `host.docker.internal` (or the docker0 bridge IP), so it cannot reach the
+  host's loopback.
+- From a **remote machine** (e.g., kgaf3_chatbot on one side and AF3 on another
+  Linux box), it naturally cannot reach it either.
 
-이것이 **B3 도달성 문제**다. 이 저장소는 바인딩을 환경변수로 바꾸는
-1줄 패치를 동봉한다.
+This is the **B3 reachability issue**. This repository bundles a 1-line patch
+that changes the binding to be driven by environment variables.
 
-- **`patches/af3_mcp_host_env.patch`** — `main()`이 `AF3_MCP_HOST`(기본
-  `0.0.0.0`) / `AF3_MCP_PORT`(기본 `8002`) 환경변수를 읽도록 바꾼다.
+- **`patches/af3_mcp_host_env.patch`** — makes `main()` read the `AF3_MCP_HOST`
+  (default `0.0.0.0`) / `AF3_MCP_PORT` (default `8002`) environment variables.
 
-> 이 패치는 **외부 `af3_chatbot` 저장소**에 적용한다(kgaf3_chatbot이 아니다).
-> 설치기는 이 패치를 **자동으로 적용하지 않는다.**
+> Apply this patch to the **external `af3_chatbot` repository** (not
+> kgaf3_chatbot). The installer does **not apply this patch automatically.**
 
 ```bash
-# af3_chatbot 저장소 루트에서 (git 체크아웃이면)
+# From the af3_chatbot repository root (if it is a git checkout)
 git apply /path/to/kgaf3_chatbot/patches/af3_mcp_host_env.patch
-# git 체크아웃이 아니면
+# If it is not a git checkout
 patch -p1 < /path/to/kgaf3_chatbot/patches/af3_mcp_host_env.patch
 ```
 
-패치 적용 후 바인딩을 설정한다(예: `af3-mcp.service`의 `[Service]` 블록):
+After applying the patch, configure the binding (e.g., in the `[Service]` block
+of `af3-mcp.service`):
 
 ```ini
 [Service]
-Environment=AF3_MCP_HOST=0.0.0.0      # 또는 docker0 브리지 IP (예: 172.17.0.1)
+Environment=AF3_MCP_HOST=0.0.0.0      # or the docker0 bridge IP (e.g., 172.17.0.1)
 Environment=AF3_MCP_PORT=8002
 ```
 
@@ -155,68 +172,75 @@ sudo systemctl daemon-reload
 sudo systemctl restart af3-mcp
 ```
 
-`0.0.0.0`은 모든 인터페이스에 여는 것이므로, **방화벽으로 신뢰 대상에만**
-범위를 좁혀야 한다. 패치 없이 푸는 대안(host network 모드, socat/nginx 포워더,
-SSH 터널)과 방화벽 설정 예시는 **[`docs/BRIDGE.md`](BRIDGE.md)** 에 전부
-정리돼 있다. 이 3단계와 B3 관련 내용은 전적으로 **외부 AF3 MCP**에 적용되며,
-GraphRAG 스택(내부 compose)과는 무관하다.
+Since `0.0.0.0` opens on all interfaces, you must **narrow the scope to trusted
+targets with a firewall**. Alternatives that resolve this without the patch
+(host network mode, socat/nginx forwarder, SSH tunnel) and example firewall
+configurations are all collected in **[`docs/BRIDGE.md`](BRIDGE.md)**. This
+Stage 3 and the B3-related content apply entirely to the **external AF3 MCP** and
+are unrelated to the GraphRAG stack (internal compose).
 
 ---
 
-## 4단계 — `AF3_MCP_URL` 설정 (configure.md)
+## Stage 4 — Set `AF3_MCP_URL` (configure.md)
 
-브리지가 도달 가능해졌으면, kgaf3_chatbot이 그 주소를 알도록
-[`configure.md`](../configure.md)의 ```ini 블록에서 `AF3_MCP_URL`을 맞춘다.
+Once the bridge is reachable, set `AF3_MCP_URL` in the ```ini block of
+[`configure.md`](../configure.md) so that kgaf3_chatbot knows its address.
 
 ```ini
-AF3_MCP_URL     = http://host.docker.internal:8002/mcp/   # 같은 호스트의 AF3
-AF3_OUTPUT_ROOT = /data/af3_output                        # AF3 결과 절대경로(이미 존재해야 함)
-AF3_MCP_AUTH_TOKEN =                                      # AF3 MCP가 인증을 요구할 때만
+AF3_MCP_URL     = http://host.docker.internal:8002/mcp/   # AF3 on the same host
+AF3_OUTPUT_ROOT = /data/af3_output                        # absolute path to AF3 results (must already exist)
+AF3_MCP_AUTH_TOKEN =                                      # only when the AF3 MCP requires authentication
 ```
 
-컨테이너 관점에서 올바른 호스트를 가리키는지가 핵심이다:
+The key is whether it points to the correct host from the container's
+perspective:
 
-- **같은 호스트의 AF3** → `http://host.docker.internal:8002/mcp/`.
-  Linux compose에서 `host.docker.internal`이 안 풀리면 `extra_hosts`로
-  `host-gateway`를 매핑하거나 docker0 IP(예: `172.17.0.1`)를 직접 적는다.
-- **원격 AF3 호스트** → `http://<원격호스트IP>:8002/mcp/`.
+- **AF3 on the same host** → `http://host.docker.internal:8002/mcp/`.
+  If `host.docker.internal` does not resolve in Linux compose, map
+  `host-gateway` via `extra_hosts` or write the docker0 IP (e.g., `172.17.0.1`)
+  directly.
+- **Remote AF3 host** → `http://<remote-host-IP>:8002/mcp/`.
 
-`AF3_OUTPUT_ROOT`는 AF3가 결과를 쓰는 **호스트 절대경로**이며, kgaf3-chat이
-**읽기 전용**으로 마운트해 예측 CIF를 읽는다. 경로는 설치 전에 이미 존재해야
-한다. 인증 뒤에 브리지를 둔 경우에만 `AF3_MCP_AUTH_TOKEN`에 Bearer 토큰을
-넣는다. 나머지 설치 흐름은 [`docs/INSTALL.md`](INSTALL.md)를 따른다.
+`AF3_OUTPUT_ROOT` is the **host absolute path** where AF3 writes its results, and
+kgaf3-chat mounts it **read-only** to read the predicted CIFs. The path must
+already exist before installation. Only if the bridge is placed behind
+authentication should you put a Bearer token in `AF3_MCP_AUTH_TOKEN`. Follow
+[`docs/INSTALL.md`](INSTALL.md) for the rest of the installation flow.
 
 ---
 
-## 5단계 — 검증
+## Stage 5 — Verification
 
-설치기(`install.sh` / `install.bat`)는 마지막 단계에서 `AF3_MCP_URL`로 MCP
-`initialize` + `tools/list`를 호출해 **연결과 도구 목록(배치 도구 포함)** 을
-확인하고, 실패 시 무엇을 고쳐야 하는지 정확히 출력한다. 성공하면 보고서에
-`External AF3: <URL> [connected, batch tools verified]`가 찍힌다.
+In its final stage, the installer (`install.sh` / `install.bat`) calls MCP
+`initialize` + `tools/list` on `AF3_MCP_URL` to confirm the **connection and the
+tool list (including batch tools)**, and on failure it prints exactly what needs
+to be fixed. On success, the report shows
+`External AF3: <URL> [connected, batch tools verified]`.
 
-수동으로 엔드포인트가 살아있는지만 빠르게 보려면:
+To quickly check just whether the endpoint is alive by hand:
 
 ```bash
-# 200 응답이면 엔드포인트는 살아있음 (MCP 핸드셰이크는 설치기가 수행)
+# A 200 response means the endpoint is alive (the MCP handshake is performed by the installer)
 curl -i http://host.docker.internal:8002/mcp/
 ```
 
-연결이 실패하면 다음 순서로 원인을 좁힌다(이 중 하나가 거의 항상 원인이다):
+If the connection fails, narrow down the cause in the following order (one of
+these is almost always the cause):
 
-1. 브리지가 떠 있나 — `systemctl status af3-mcp` / `journalctl -u af3-mcp -f`.
-2. 바인딩이 루프백 전용인가 — **B3**, 3단계의 패치가 필요하다.
-3. `AF3_MCP_URL`이 컨테이너 관점에서 올바른 호스트를 가리키나 — 4단계.
+1. Is the bridge up — `systemctl status af3-mcp` / `journalctl -u af3-mcp -f`.
+2. Is the binding loopback-only — **B3**, the Stage 3 patch is needed.
+3. Does `AF3_MCP_URL` point to the correct host from the container's perspective
+   — Stage 4.
 
-가상 스크리닝은 도달 가능한 AF3 MCP가 **반드시** 필요하다. AF3가 연결되지
-않으면 앱은 뜨더라도 cofolding 단계(Stage 3)에서 매번 실패한다. 자세한 진단과
-우회법은 **[`docs/BRIDGE.md`](BRIDGE.md)** 를, 사용법은
-[`docs/USAGE.md`](USAGE.md)를 참고한다.
+Virtual Screening **absolutely requires** a reachable AF3 MCP. If AF3 is not
+connected, the app will still start but will fail every time at the cofolding
+step (Stage 3). See **[`docs/BRIDGE.md`](BRIDGE.md)** for detailed diagnostics
+and workarounds, and [`docs/USAGE.md`](USAGE.md) for usage.
 
 ---
 
-관련 문서: [`docs/BRIDGE.md`](BRIDGE.md) (B3 도달성·우회법),
-[`af3-bridge/README.md`](../af3-bridge/README.md) (브리지 파일 상세),
+Related documents: [`docs/BRIDGE.md`](BRIDGE.md) (B3 reachability · workarounds),
+[`af3-bridge/README.md`](../af3-bridge/README.md) (bridge file details),
 [`configure.md`](../configure.md) (`AF3_MCP_URL` · `AF3_OUTPUT_ROOT` ·
-`AF3_MCP_AUTH_TOKEN`), [`docs/INSTALL.md`](INSTALL.md) (전체 설치).
-GraphRAG는 이와 완전히 별개의 내부 스택이다 → [`docs/GRAPHRAG.md`](GRAPHRAG.md).
+`AF3_MCP_AUTH_TOKEN`), [`docs/INSTALL.md`](INSTALL.md) (full installation).
+GraphRAG is a completely separate internal stack → [`docs/GRAPHRAG.md`](GRAPHRAG.md).

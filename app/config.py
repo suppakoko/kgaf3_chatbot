@@ -44,7 +44,7 @@ class Settings(BaseSettings):
 
     # GraphRAG (optional Neo4j knowledge graph, via bundled graphrag-mcp-server over SSE)
     # 활성 시 afmm_chat 은 self-contained Docker 스택(yoonjuho94/graphrag-neo4j:1.0 +
-    # yoonjuho94/graphrag-mcp-server:1.0)이 노출하는 MCP SSE 서버에 붙는다.
+    # yoonjuho94/graphrag-mcp-server:1.1)이 노출하는 MCP SSE 서버에 붙는다.
     # KG 데이터·Neo4j·LLM 키는 모두 MCP 서버 컨테이너 안에 있다.
     graphrag_enabled: bool = False
     graphrag_mcp_url: str = "http://graphrag-mcp:8893/sse"

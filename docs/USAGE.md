@@ -1,61 +1,71 @@
-# USAGE — kgaf3_chatbot 사용 가이드
+# USAGE — kgaf3_chatbot User Guide
 
-kgaf3_chatbot은 **하나의 웹 UI 안에 두 개의 모드**를 담고 있다:
+**English** | [한국어](USAGE.ko.md)
 
-- 🧬 **GraphRAG** — 천연물 지식그래프(NPASS 3.0 + Open Targets 25.12,
-  **273,519 노드 / 1,493,463 관계**)에 **자연어로 질의**하는 모드.
-- 🧪 **가상 스크리닝(AlphaFold)** — 단백질–리간드 **cofolding**(외부 AF3) +
-  번들 `smina --minimize` 재점수화로 **후보를 순위화**하는 모드.
+kgaf3_chatbot packs **two modes into a single web UI**:
 
-설치는 `docs/INSTALL.md`, GraphRAG 스택 자체의 배포·검증은 `docs/GRAPHRAG.md`,
-외부 AF3 준비는 `docs/AF3_SETUP.md`(및 `docs/BRIDGE.md`)를 참고하라. 이 문서는
-설치가 끝난 뒤 **브라우저에서 어떻게 쓰는가**를 다룬다.
+- 🧬 **GraphRAG** — a mode for **natural-language queries** against a natural-product
+  knowledge graph (NPASS 3.0 + Open Targets 25.12,
+  **273,519 nodes / 1,493,463 relationships**).
+- 🧪 **Virtual Screening (AlphaFold)** — a mode that **ranks candidates** via
+  protein–ligand **cofolding** (external AF3) plus bundled `smina --minimize`
+  rescoring.
+
+For installation see `docs/INSTALL.md`, for deploying and validating the GraphRAG
+stack itself see `docs/GRAPHRAG.md`, and for preparing external AF3 see
+`docs/AF3_SETUP.md` (and `docs/BRIDGE.md`). This document covers **how to use it in
+the browser** once installation is complete.
 
 ---
 
-## 0. 접속과 화면 구성
+## 0. Access and Screen Layout
 
-설치가 성공하면 브라우저에서 웹 UI를 연다(포트는 `configure.md`의 `APP_PORT`,
-기본 `5013`).
+Once installation succeeds, open the web UI in your browser (the port is `APP_PORT`
+in `configure.md`, default `5013`).
 
 ```text
 http://localhost:5013
 ```
 
-화면 상단 헤더에는 **모드 토글**이 있다. 두 개의 탭 버튼으로 되어 있다:
+The header at the top of the screen has a **mode toggle** consisting of two tab
+buttons:
 
-- **🧪 AlphaFold** — 가상 스크리닝 모드. **기본 선택**(앱 첫 진입 시 활성).
-- **🧬 GraphRAG** — 지식그래프 질의 모드.
+- **🧪 AlphaFold** — virtual screening mode. **Selected by default** (active on first
+  app entry).
+- **🧬 GraphRAG** — knowledge-graph query mode.
 
-모드 선택은 브라우저 `localStorage`에 저장되므로, 다음 방문 때 마지막으로
-쓰던 모드가 그대로 열린다. 헤더 오른쪽에는 **LLM 모델 선택 드롭다운**
-(기본 `anthropic/claude-sonnet-4-6`, `configure.md`의 `LLM_DEFAULT_MODEL`)과
-연결 상태 표시가 있다.
+The mode selection is saved in the browser's `localStorage`, so on your next visit
+the mode you last used opens directly. On the right side of the header there is an
+**LLM model selection dropdown** (default `anthropic/claude-sonnet-4-6`,
+`LLM_DEFAULT_MODEL` in `configure.md`) and a connection status indicator.
 
-화면 맨 아래 **시스템 바**에는 각 백엔드의 상태 칩이 있다:
-`AF3`(외부 AF3 MCP), `Smina`(번들 도킹 MCP), `GraphRAG`(Neo4j/MCP), `LLM`,
-`jobs`(진행 중 작업 수), GPU 사용률. 모드를 쓰기 전에 이 칩들로 필요한
-백엔드가 붙어 있는지 먼저 확인하면 좋다.
+At the very bottom of the screen the **system bar** has status chips for each
+backend: `AF3` (external AF3 MCP), `Smina` (bundled docking MCP), `GraphRAG`
+(Neo4j/MCP), `LLM`, `jobs` (number of in-progress jobs), and GPU utilization.
+Before using a mode, it's a good idea to first check these chips to confirm the
+required backend is connected.
 
-> 모드에 따라 입력창 안내문(placeholder)과 환영 패널의 예시가 바뀐다.
-> 왼쪽 사이드바의 **+ 새 대화**로 대화를 새로 시작할 수 있고, 최근 대화
-> 목록에서 이전 세션을 다시 열 수 있다.
+> Depending on the mode, the input-box placeholder and the welcome panel's examples
+> change. Use **+ New Conversation** in the left sidebar to start a new
+> conversation, and reopen a previous session from the recent-conversation list.
 
 ---
 
-## 1. 🧬 GraphRAG 모드 — 지식그래프 자연어 질의
+## 1. 🧬 GraphRAG Mode — Natural-Language Knowledge-Graph Queries
 
-### 1-1. 무엇을 물어볼 수 있나
+### 1-1. What Can You Ask
 
-GraphRAG는 천연물–타겟–질병 지식그래프에 대해 **Text2Cypher**로 답한다.
-질문을 자연어로 입력하면, 백엔드가 그 질문을 **Cypher 쿼리로 변환 → Neo4j에서
-실행 → 결과를 Markdown 답변으로 합성**한다.
+GraphRAG answers against a natural-product–target–disease knowledge graph via
+**Text2Cypher**. When you type a question in natural language, the backend
+**converts that question into a Cypher query → runs it on Neo4j → synthesizes the
+results into a Markdown answer**.
 
-> **질병·단백질 이름은 영어를 권장한다.** 지식그래프의 노드 라벨과 식별자가
-> 영어(질병명, UniProt/Ensembl ID, 유전자 심볼 등)로 되어 있어, 영어 질의가
-> 매칭 정확도가 높다. 한국어 질의도 동작한다.
+> **English is recommended for disease and protein names.** Because the knowledge
+> graph's node labels and identifiers are in English (disease names, UniProt/Ensembl
+> IDs, gene symbols, etc.), English queries have higher matching accuracy. Korean
+> queries also work.
 
-환영 패널에 실린 예시 질문 그대로 시작해도 된다:
+You can start with the example questions right from the welcome panel:
 
 ```text
 • Tell me the targets for glaucoma treatment
@@ -65,100 +75,106 @@ GraphRAG는 천연물–타겟–질병 지식그래프에 대해 **Text2Cypher*
 • 알츠하이머 관련 단백질 타겟에 활성이 있는 천연물 상위 10개를 보여줘
 ```
 
-입력창 안내문에도 짧은 예시가 뜬다(예: `ROCK1 에 활성 있는 천연물 상위 20개`).
-Enter로 전송, Shift+Enter로 줄바꿈이다.
+A short example also appears in the input-box placeholder (e.g.,
+`ROCK1 에 활성 있는 천연물 상위 20개`). Enter sends, Shift+Enter inserts a line break.
 
-### 1-2. 진행 카드 — 네 단계
+### 1-2. Progress Card — Four Steps
 
-질문을 보내면 답변 자리에 **"GraphRAG 진행 상황"** 카드가 뜨고, 아래 네 단계가
-순서대로 채워진다:
+When you send a question, a **"GraphRAG Progress"** card appears in the answer slot,
+and the four steps below fill in one after another:
 
-| 단계 키 | 카드 표시 | 의미 |
+| Step key | Card label | Meaning |
 |---|---|---|
-| `cypher_gen` | 🧠 Cypher 생성 | 자연어 질문을 Cypher 쿼리로 변환 |
-| `neo4j_exec` | 🔍 Neo4j 실행 | 생성된 Cypher를 지식그래프에서 실행 |
-| `answer_synth` | 📝 답변 합성 | 결과 행을 Markdown 답변으로 정리 |
-| `complete` | (카드 헤더에 요약) | 총 소요 시간·상태 요약 확정 |
+| `cypher_gen` | 🧠 Cypher generation | Convert the natural-language question into a Cypher query |
+| `neo4j_exec` | 🔍 Neo4j execution | Run the generated Cypher on the knowledge graph |
+| `answer_synth` | 📝 Answer synthesis | Organize the result rows into a Markdown answer |
+| `complete` | (summary in card header) | Finalize the total elapsed time and status summary |
 
-카드에는 **실제로 실행된 Cypher 쿼리**와 **반환된 행 수(row count)**, 토큰
-사용량이 함께 표시된다. 최종 **답변은 Markdown**으로 렌더링된다(표·목록·굵은
-글씨 등).
+The card also shows the **actual Cypher query that was executed**, the **number of
+rows returned (row count)**, and token usage. The final **answer is rendered as
+Markdown** (tables, lists, bold text, etc.).
 
-> 내부적으로 이 네 단계는 MCP `graphrag_query` **한 번의 호출**이 돌려준
-> 메타데이터로 사후에 채워진다(프론트엔드가 보여주는 모양은 그대로다). 자세한
-> 내부 동작은 `docs/GRAPHRAG.md`의 "한 방 질의와 진행 카드" 절을 보라.
+> Internally, these four steps are filled in after the fact from the metadata
+> returned by a **single call** to the MCP `graphrag_query` (the shape the frontend
+> shows stays the same). For details on the internal behavior, see the "One-shot
+> query and progress card" section of `docs/GRAPHRAG.md`.
 
-### 1-3. 사용 가능한 MCP 도구 세 개
+### 1-3. The Three Available MCP Tools
 
-GraphRAG MCP 서버(`http://graphrag-mcp:8893/sse`, 호스트 루프백
-`127.0.0.1:8893`에도 공개)가 노출하는 도구는 정확히 셋이다. 채팅 UI의 🧬
-GraphRAG 질의는 이 중 첫 번째를 쓴다.
+The GraphRAG MCP server (`http://graphrag-mcp:8893/sse`, also exposed on the host
+loopback `127.0.0.1:8893`) exposes exactly three tools. The 🧬 GraphRAG queries in
+the chat UI use the first of these.
 
-- **`graphrag_query`** — 자연어 → Cypher → 실행 → Markdown 답변을 **한 방에**
-  처리. `answer`, `cypher`, `row_count`, `token_usage` 등을 돌려준다.
-  LLM 단계를 돌리므로 **`OPENROUTER_API_KEY`가 필요하다**(채팅과 같은 키).
-- **`get_kg_stats`** — 노드/관계 개수 반환. **LLM 키 불필요.**
-- **`run_cypher`** — 읽기 전용 직접 Cypher 실행. **LLM 키 불필요.**
+- **`graphrag_query`** — handles natural language → Cypher → execution → Markdown
+  answer **in one shot**. Returns `answer`, `cypher`, `row_count`, `token_usage`,
+  etc. Since it runs an LLM step, it **requires `OPENROUTER_API_KEY`** (the same key
+  as chat).
+- **`get_kg_stats`** — returns node/relationship counts. **No LLM key required.**
+- **`run_cypher`** — read-only direct Cypher execution. **No LLM key required.**
 
-로컬의 다른 MCP 클라이언트(예: Claude Desktop)도 `127.0.0.1:8893`으로 같은
-서버에 붙어 이 도구들을 쓸 수 있다.
+Other local MCP clients (e.g., Claude Desktop) can also connect to the same server
+at `127.0.0.1:8893` and use these tools.
 
-### 1-4. GraphRAG 워크드 예시
+### 1-4. GraphRAG Worked Example
 
-1. 헤더에서 **🧬 GraphRAG** 탭을 누른다.
-2. 입력창에 다음을 붙여넣고 Enter:
+1. Click the **🧬 GraphRAG** tab in the header.
+2. Paste the following into the input box and press Enter:
 
    ```text
    Return the top 20 natural products active against ROCK1 with IC50 < 100 nM
    ```
 
-3. 진행 카드가 `🧠 Cypher 생성` → `🔍 Neo4j 실행` → `📝 답변 합성` →
-   완료 순으로 채워진다. 카드에는 생성된 Cypher(예: `MATCH (np:NaturalProduct)
-   -[a:HAS_ACTIVITY]->(t:Target {symbol:'ROCK1'}) WHERE a.ic50 < 100 ...`)와
-   반환 행 수가 뜬다.
-4. 답변 자리에 **Markdown 표**로 천연물 목록(이름·IC50 등)이 정리되어 나온다.
+3. The progress card fills in in order: `🧠 Cypher generation` → `🔍 Neo4j
+   execution` → `📝 Answer synthesis` → complete. The card shows the generated
+   Cypher (e.g., `MATCH (np:NaturalProduct)
+   -[a:HAS_ACTIVITY]->(t:Target {symbol:'ROCK1'}) WHERE a.ic50 < 100 ...`) and the
+   number of rows returned.
+4. In the answer slot, the natural-product list (name, IC50, etc.) is presented as a
+   **Markdown table**.
 
-> **키가 없을 때:** `OPENROUTER_API_KEY`가 비어 있으면 `graphrag_query`(자연어
-> 질의)는 실패한다. 다만 KG가 살아 있는지는 키 없이도 `get_kg_stats` /
-> `run_cypher`로 확인할 수 있다(방법은 `docs/GRAPHRAG.md`). 카드에
-> `service.graphrag.mcp_unreachable` 관련 오류가 뜨면 GraphRAG 스택이 떠 있는지
-> 부터 점검하라.
+> **When there is no key:** if `OPENROUTER_API_KEY` is empty, `graphrag_query`
+> (natural-language queries) fails. However, you can still check whether the KG is
+> alive without a key using `get_kg_stats` / `run_cypher` (see `docs/GRAPHRAG.md`
+> for how). If the card shows an error related to
+> `service.graphrag.mcp_unreachable`, first check whether the GraphRAG stack is up.
 
 ---
 
-## 2. 🧪 가상 스크리닝 모드 — cofolding + 재점수화
+## 2. 🧪 Virtual Screening Mode — Cofolding + Rescoring
 
-### 2-1. 파이프라인 개요
+### 2-1. Pipeline Overview
 
-스크리닝 모드는 **단백질–리간드 복합체를 예측하고 순위를 매긴다**:
+The screening mode **predicts and ranks protein–ligand complexes**:
 
 ```text
-입력(단백질 FASTA + 리간드 SMILES) 또는 라이브러리 파일
+Input (protein FASTA + ligand SMILES) or a library file
       │
-      ▼  AF3 cofolding  (외부 AlphaFold3 MCP — 사용자가 직접 운영)
-      ▼  smina --minimize  재점수화  (번들 smina-mcp, 설정 불필요)
+      ▼  AF3 cofolding  (external AlphaFold3 MCP — you operate it yourself)
+      ▼  smina --minimize  rescoring  (bundled smina-mcp, no configuration)
       ▼
-순위화된 후보 표  +  Mol* 인터랙티브 3D 뷰  +  복합체 CIF(엔드포인트로 제공)
+Ranked candidate table  +  Mol* interactive 3D view  +  complex CIF (served via endpoint)
 ```
 
-> **스크리닝 모드에는 닿을 수 있는 외부 AF3 MCP가 반드시 필요하다.** AF3가
-> 연결돼 있지 않으면 파이프라인이 **cofolding 단계에서 실패**한다. AF3 모델
-> 가중치·서열 DB는 이 저장소에 **재배포되지 않으며**(구글 딥마인드 라이선스),
-> 사용자가 직접 AF3와 가중치를 확보해 자신의 GPU 머신에서 돌려야 한다. 준비·
-> 연결 방법은 `docs/AF3_SETUP.md`와 `docs/BRIDGE.md`를 보라. 화면 하단 시스템
-> 바의 `AF3` 칩으로 연결 상태를 먼저 확인하라. 번들 `smina`는 별도 설정이
-> 필요 없다(내부 Docker 네트워크에서 자동 연결).
+> **Screening mode absolutely requires a reachable external AF3 MCP.** If AF3 is not
+> connected, the pipeline **fails at the cofolding step**. The AF3 model weights and
+> sequence DBs are **not redistributed** in this repository (Google DeepMind
+> license); you must obtain AF3 and the weights yourself and run them on your own GPU
+> machine. For preparation and connection instructions, see `docs/AF3_SETUP.md` and
+> `docs/BRIDGE.md`. Check the connection status first using the `AF3` chip in the
+> system bar at the bottom of the screen. The bundled `smina` needs no separate
+> configuration (auto-connected on the internal Docker network).
 
-### 2-2. 입력 방법 1 — 채팅에 직접 붙여넣기
+### 2-2. Input Method 1 — Paste Directly into Chat
 
-단백질 **FASTA 서열**과 **하나 이상의 리간드 SMILES**(한 줄에 하나, 뒤에
-선택적으로 이름)를 함께 붙여넣고, **도킹 요청 문구**(예: "도킹해서 순위
-매겨줘")를 덧붙여 전송한다. 환영 패널의 예시 형식이 그대로 유효하다:
+Paste a protein **FASTA sequence** together with **one or more ligand SMILES** (one
+per line, optionally followed by a name), and add a **docking request phrase**
+(e.g., "dock and rank them") before sending. The example format from the welcome
+panel remains valid as-is:
 
 ```text
 >ROCK1_HUMAN_1-415
 MSTGDSFETRFEKMDNLLRDPKSEVNSDCLLDGLDALVYDLDFPALRKNKNIDNFLSRYK
-... (전체 415aa 시퀀스) ...
+... (full 415aa sequence) ...
 
 CN(C)CCOC1=C(C=CC(=C1)C2=CNN=C2)NC(=O)[C@H]3CC4=C(C=CC(=C4)OC)OC3 Chroman_1
 C[C@H]1CNCCCN1S(=O)(=O)C2=CC=CC3=C2C(=CN=C3)C H1152
@@ -167,88 +183,96 @@ C[C@H](C1CCC(CC1)C(=O)NC2=CC=NC=C2)N Y-27632
 위 단백질에 화합물 3개를 docking해서 순위를 매겨주세요
 ```
 
-- 각 SMILES 줄은 `SMILES [이름]` 형식이다. 이름은 생략 가능하며, 넣으면 결과
-  표의 `Ligand` 열에 그대로 쓰인다.
-- 도킹을 시작시키려면 **도킹 키워드**(예: "docking", "도킹", "순위")가 담긴
-  요청 문구가 필요하다. 단백질/리간드만 붙여넣으면 챗봇은 일반 대화로 받는다.
+- Each SMILES line has the form `SMILES [name]`. The name is optional; if included,
+  it is used as-is in the `Ligand` column of the results table.
+- To start docking, you need a request phrase containing a **docking keyword** (e.g.,
+  "docking", "도킹", "순위"). If you paste only the protein/ligands, the chatbot
+  treats it as ordinary conversation.
 
-### 2-3. 입력 방법 2 — 라이브러리 파일 업로드
+### 2-3. Input Method 2 — Upload a Library File
 
-여러 화합물을 한 번에 스크리닝하려면 입력창의 **라이브러리 업로드** 버튼으로
-파일을 올린다. 허용 확장자는 **`.sdf`, `.smi`, `.csv`, `.txt`**다. 업로드하면
-미리보기 영역에 파일명과 파싱된 화합물 정보가 뜬다. 이후 단백질 FASTA와 도킹
-요청 문구를 함께 보내면 라이브러리 전체가 스크리닝 대상이 된다.
+To screen many compounds at once, upload a file with the **library upload** button
+in the input box. Allowed extensions are **`.sdf`, `.smi`, `.csv`, `.txt`**. After
+uploading, the filename and parsed compound information appear in the preview area.
+Then send the protein FASTA together with a docking request phrase to make the entire
+library the screening target.
 
-### 2-4. 진행과 결과
+### 2-4. Progress and Results
 
-전송 후에는 **작업 진행 상황** 패널이 뜨고, cofolding→재점수화가 끝나면 결과
-카드가 채워진다. 결과 카드에는 다음이 포함된다.
+After sending, a **Job Progress** panel appears, and once cofolding→rescoring
+finishes, the results card fills in. The results card includes the following.
 
-**① 순위화된 후보 표.** 컬럼은 다음과 같다(헤더에 단위·방향 표기):
+**① Ranked candidate table.** The columns are as follows (units and direction noted
+in the headers):
 
-| 컬럼 | 단위/방향 | 의미 |
+| Column | Unit/Direction | Meaning |
 |---|---|---|
-| `#` | — | 현재 정렬 기준의 순위 |
-| `Ligand` | — | 리간드 이름/ID |
-| `ipTM` | 0~1 ↑ | AF3 인터페이스 신뢰도(높을수록 좋음) |
-| `PAE` | Å ↓ | 예측 정렬 오차(낮을수록 좋음) |
-| `Smina` | kcal/mol ↓ | `smina --minimize` 재점수(낮을수록 강한 결합) |
-| `Score` | composite ↑ | 종합 점수(높을수록 좋음) |
+| `#` | — | Rank under the current sort criterion |
+| `Ligand` | — | Ligand name/ID |
+| `ipTM` | 0–1 ↑ | AF3 interface confidence (higher is better) |
+| `PAE` | Å ↓ | Predicted aligned error (lower is better) |
+| `Smina` | kcal/mol ↓ | `smina --minimize` rescore (lower means stronger binding) |
+| `Score` | composite ↑ | Composite score (higher is better) |
 
-표는 **정렬 가능**하다. 결과 카드의 **정렬 드롭다운**에서 `Smina` /
-`Composite` / `AF3 Score`(ranking_score) / `ipTM`을 고르거나, 정렬 가능한 숫자
-컬럼 헤더(`ipTM` / `Smina` / `Score`)를 클릭해 정렬한다(`PAE`·`#` 헤더는 정렬
-버튼이 아니다). 백엔드 결과 API는 정렬 기준으로
-**`smina` / `composite` / `iptm` / `ranking_score` / `e_inter`**(상호작용
-에너지)를 받는다. `상위 N개` 입력으로 표시 개수를 제한(최대 100)하고,
-**새로고침**·**CSV**·**TSV** 버튼으로 현재 정렬·상위 N 기준의 표를 내려받을 수
-있다.
+The table is **sortable**. From the results card's **sort dropdown**, choose `Smina`
+/ `Composite` / `AF3 Score` (ranking_score) / `ipTM`, or click a sortable numeric
+column header (`ipTM` / `Smina` / `Score`) to sort (the `PAE` and `#` headers are not
+sort buttons). The backend results API accepts these sort criteria:
+**`smina` / `composite` / `iptm` / `ranking_score` / `e_inter`** (interaction
+energy). Limit the number displayed with the `Top N` input (max 100), and use the
+**Refresh**, **CSV**, and **TSV** buttons to download the table under the current
+sort and top-N criteria.
 
-**② 인터랙티브 Mol* 3D 뷰.** 후보를 열면 **Mol*** 기반 3D 복합체 뷰어가
-오버레이로 뜬다. 단백질–리간드 복합체를 회전·확대하며 보고, 툴바의
-**스크린샷** 버튼으로 현재 화면을 이미지로 저장한다.
+**② Interactive Mol* 3D view.** When you open a candidate, a **Mol***-based 3D
+complex viewer appears as an overlay. Rotate and zoom the protein–ligand complex,
+and save the current screen as an image with the **Screenshot** button in the
+toolbar.
 
-**③ 복합체 CIF.** 각 후보의 예측 복합체 구조는 **CIF**로 제공된다. 전용
-다운로드 버튼은 없지만, Mol* 뷰어가 로드하는 것과 동일한 구조를
-`/api/results/{job}/{ligand}/cif` 엔드포인트에서 직접 받아 외부 도구(PyMOL 등)로
-열 수 있다.
+**③ Complex CIF.** Each candidate's predicted complex structure is served as
+**CIF**. There is no dedicated download button, but you can fetch the same structure
+that the Mol* viewer loads directly from the `/api/results/{job}/{ligand}/cif`
+endpoint and open it in an external tool (PyMOL, etc.).
 
-**④ 분포 차트.** 결과 카드의 **차트** 버튼으로 분포 패널을 열면 **Smina 분포**와
-**ipTM vs Smina** 산점도를 볼 수 있다.
+**④ Distribution charts.** Open the distribution panel with the **Chart** button in
+the results card to see the **Smina distribution** and an **ipTM vs Smina** scatter
+plot.
 
-### 2-5. 스크리닝 워크드 예시
+### 2-5. Screening Worked Example
 
-1. 헤더에서 **🧪 AlphaFold** 탭이 선택돼 있는지 확인한다(기본값).
-2. 시스템 바의 `AF3` 칩이 연결됨을 확인한다. `-`거나 끊겨 있으면
-   `docs/AF3_SETUP.md`로 먼저 AF3 MCP를 연결한다.
-3. 위 2-2의 ROCK1 FASTA + 3개 SMILES(Chroman_1, H1152, Y-27632) +
-   "docking해서 순위를 매겨주세요"를 붙여넣고 Enter.
-4. 진행 패널에서 AF3 cofolding → smina 재점수화가 진행된다(대형 작업은 시간이
-   걸린다).
-5. 결과 카드에서 **Smina** 기준 정렬로 상위 후보를 확인하고, 관심 후보를 열어
-   **Mol* 3D 뷰**로 결합 포즈를 살펴본다. 필요하면 위 CIF 엔드포인트로 구조를
-   받는다. 표 전체는 **CSV/TSV**로 저장한다.
-
----
-
-## 3. 자주 막히는 곳
-
-- **스크리닝이 cofolding에서 실패** — 외부 AF3 MCP에 닿지 못하는 경우다. 원격
-  호스트이거나 AF3 MCP가 `127.0.0.1`에만 바인딩된 상황이 흔하다. 호스트 바인딩
-  패치·SSH 터널 등 해결법은 `docs/AF3_SETUP.md` / `docs/BRIDGE.md`, 연결값
-  `AF3_MCP_URL`은 `configure.md`를 보라.
-- **GraphRAG 질의 실패** — `OPENROUTER_API_KEY` 누락(자연어 질의는 LLM 필요),
-  또는 GraphRAG 스택 미기동(`service.graphrag.mcp_unreachable`). 스택 기동·검증은
-  `docs/GRAPHRAG.md`. GraphRAG가 꺼져 있어도 앱과 스크리닝 모드는 정상 동작한다.
-- **화면에 모드 토글이 그대로인데 반응 없음** — 브라우저 새로고침 후 헤더의
-  탭(🧪/🧬)을 다시 눌러 보라. 선택은 `localStorage`에 저장된다.
+1. Confirm that the **🧪 AlphaFold** tab is selected in the header (the default).
+2. Confirm that the `AF3` chip in the system bar is connected. If it shows `-` or is
+   disconnected, first connect the AF3 MCP via `docs/AF3_SETUP.md`.
+3. Paste the ROCK1 FASTA + 3 SMILES (Chroman_1, H1152, Y-27632) from 2-2 above +
+   "docking해서 순위를 매겨주세요" and press Enter.
+4. In the progress panel, AF3 cofolding → smina rescoring proceeds (large jobs take
+   time).
+5. In the results card, check the top candidates by sorting on **Smina**, then open a
+   candidate of interest to examine the binding pose in the **Mol* 3D view**. If
+   needed, fetch the structure via the CIF endpoint above. Save the full table as
+   **CSV/TSV**.
 
 ---
 
-## 관련 문서
+## 3. Common Sticking Points
 
-- [docs/INSTALL.md](INSTALL.md) — 설치·헬스체크·nginx·트러블슈팅.
-- [docs/GRAPHRAG.md](GRAPHRAG.md) — GraphRAG 스택 배포·검증·트러블슈팅(기본 ON).
-- [docs/AF3_SETUP.md](AF3_SETUP.md) — 외부 AF3 라이선스·가중치·MCP 브리지 준비.
-- [docs/BRIDGE.md](BRIDGE.md) — 외부 AF3 MCP 도달성(호스트 바인딩/터널).
-- [configure.md](../configure.md) — 모든 설정 키와 기본값.
+- **Screening fails at cofolding** — this happens when the external AF3 MCP is
+  unreachable. It's common for the host to be remote or for the AF3 MCP to be bound
+  only to `127.0.0.1`. For fixes such as host-binding patches and SSH tunnels, see
+  `docs/AF3_SETUP.md` / `docs/BRIDGE.md`; for the connection value `AF3_MCP_URL`,
+  see `configure.md`.
+- **GraphRAG query fails** — a missing `OPENROUTER_API_KEY` (natural-language queries
+  need an LLM), or the GraphRAG stack not being up (`service.graphrag.mcp_unreachable`).
+  For starting and validating the stack, see `docs/GRAPHRAG.md`. Even if GraphRAG is
+  off, the app and the screening mode work normally.
+- **The mode toggle on screen stays put with no response** — refresh the browser,
+  then press the header tab (🧪/🧬) again. The selection is saved in `localStorage`.
+
+---
+
+## Related Documents
+
+- [docs/INSTALL.md](INSTALL.md) — installation, health checks, nginx, troubleshooting.
+- [docs/GRAPHRAG.md](GRAPHRAG.md) — GraphRAG stack deployment, validation, troubleshooting (ON by default).
+- [docs/AF3_SETUP.md](AF3_SETUP.md) — external AF3 license, weights, MCP bridge preparation.
+- [docs/BRIDGE.md](BRIDGE.md) — external AF3 MCP reachability (host binding/tunnel).
+- [configure.md](../configure.md) — all configuration keys and default values.
