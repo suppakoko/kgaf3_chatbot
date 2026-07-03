@@ -65,7 +65,7 @@ and `neo4j` (7474/7687) are internal only.
   **GPU** machine that you run yourself — see [docs/AF3_SETUP.md](docs/AF3_SETUP.md).
   kgaf3-chat itself needs no GPU.
 - For **GraphRAG mode**: the two GraphRAG images are **pulled** automatically from
-  Docker Hub (`yoonjuho94/graphrag-neo4j:1.0`, `yoonjuho94/graphrag-mcp-server:1.0`);
+  Docker Hub (`yoonjuho94/graphrag-neo4j:1.0`, `yoonjuho94/graphrag-mcp-server:1.1`);
   no build required.
 
 ## Quick start
