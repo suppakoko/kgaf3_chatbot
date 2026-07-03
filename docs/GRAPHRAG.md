@@ -38,7 +38,7 @@ KG는 **NPASS 3.0 + Open Targets release 25.12**을 합친 것으로,
   내부 bolt는 `bolt://neo4j:7687`. 기본 비밀번호 `kist2026npi`(이미지에
   맞춰져 있다). 호스트 포트 `7474`/`7687`은 compose에서 기본으로 주석 처리다.
   named volume `neo4j-data`에 데이터가 유지된다.
-- `yoonjuho94/graphrag-mcp-server:1.0` — 포트 **8893**의 MCP **SSE** 서버.
+- `yoonjuho94/graphrag-mcp-server:1.1` — 포트 **8893**의 MCP **SSE** 서버.
   컨테이너 이름 `graphrag-mcp`(compose 서비스명 `graphrag-mcp`).
   내부 엔드포인트 `http://graphrag-mcp:8893/sse`. 호스트 루프백
   `127.0.0.1:8893`에도 함께 공개돼서, 로컬의 다른 MCP 클라이언트(예:
