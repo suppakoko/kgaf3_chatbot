@@ -111,7 +111,7 @@ and the GraphRAG images live on Docker Hub, so you can pull instead of building:
 docker pull ghcr.io/suppakoko/kgaf3-chat            # web UI / API
 docker pull ghcr.io/suppakoko/afmm-smina-mcp        # bundled smina docking MCP
 docker pull yoonjuho94/graphrag-neo4j:1.0           # Neo4j with the KG baked in
-docker pull yoonjuho94/graphrag-mcp-server:1.0      # GraphRAG MCP SSE server
+docker pull yoonjuho94/graphrag-mcp-server:1.1      # GraphRAG MCP SSE server
 ```
 
 To make the Compose stack use the app images instead of building them, add a
@@ -128,7 +128,7 @@ services:
     build: null
 ```
 
-The GraphRAG images (`yoonjuho94/graphrag-*:1.0`) are already pulled, not built,
+The GraphRAG images (`yoonjuho94/graphrag-*:1.1`) are already pulled, not built,
 so they need no override.
 
 ## Documentation
